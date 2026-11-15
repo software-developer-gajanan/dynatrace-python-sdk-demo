@@ -1,282 +1,307 @@
 # dynatrace-python-sdk-demo
-Python demo app traced with the Dynatrace OneAgent SDK, with an SOP
-Standard Operating Procedure
-Tracing a Python application with the Dynatrace OneAgent SDK - setup, verification and failure analysis
-Applies to
-Python applications on hosts with Dynatrace OneAgent (full-stack). Tested on Linux; production target is Windows Server.
-Owner
-Dynatrace / Monitoring team
-Prepared by
-Gajanan Kalkundre
-Reviewed by
-Done
 
-1. Purpose and scope
-Dynatrace OneAgent detects a Python process and shows host and process metrics, but it does not create services or traces for Python code on its own. This SOP shows how to add request-level tracing with the OneAgent SDK for Python, how to confirm it in Dynatrace, and how to test and analyse failures.
-A small demo application (sample_app.py) is used throughout, so every step can be checked before the same pattern is applied to a real application.
+# Dynatrace OneAgent SDK for Python – Application Tracing
 
+A practical, step-by-step guide to integrating the Dynatrace OneAgent SDK for Python into a Python application, validating end-to-end tracing, testing failure scenarios, and troubleshooting common issues.
 
-Without the SDK
-With the SDK
-What Dynatrace shows
-Host, process, CPU, memory, network
-Services, endpoints, traces (PurePaths), SQL calls, outgoing calls, failures
-Code change needed
-None
-Yes - tracer calls added to the application
+**Project:** Dynatrace OneAgent SDK for Python  
+**Document ID:** SOP-DT-PY-002  
+**Version:** 1.0  
+**Author:** Gajanan Kalkundre  
+**Date:** 15 November 2026
 
-2. Prerequisites
-Item
-Requirement
-OneAgent
-Installed and running on the host, full-stack mode, version 1.251 or newer.
-Python
-CPython 3.8 or newer. x86 / x86-64 only. On Linux the system must be glibc based (Alpine/musl is not supported).
-Packages
-oneagent-sdk (installed in a virtual environment). The demo application uses only the standard library.
-Network
-Browser access to the application port (8085 in this SOP). The application's outgoing call needs its target URL to be reachable (optional).
-Rights
-Install and run as a normal user. Do not use sudo for the virtual environment or pip.
+---
 
-Module 1 - Prepare the environment
-Go to the application folder and create a virtual environment as your own user.
-Install the SDK inside the virtual environment.
-Check that the SDK can find the OneAgent.
+## 1. Project Overview
+
+Dynatrace OneAgent can detect Python processes and provide host-level and process-level monitoring. However, application-level services, endpoints, distributed traces, SQL calls, and outgoing requests require additional instrumentation.
+
+This project demonstrates how to integrate the Dynatrace OneAgent SDK for Python to achieve application-level visibility and distributed tracing.
+
+### Key Objectives
+
+- Integrate the Dynatrace OneAgent SDK with a Python application.
+- Enable application-level distributed tracing.
+- Monitor incoming and outgoing requests.
+- Capture SQL database calls.
+- Monitor internal business transactions.
+- Identify and troubleshoot application failures.
+- Validate application performance through Dynatrace.
+
+## 2. Architecture and Observability
+
+The following architecture represents the monitoring flow:
+
+```text
+User / Browser
+      |
+      v
+Python Application
+      |
+      +---- Incoming Request Tracing
+      |
+      +---- Custom Business Services
+      |
+      +---- SQL Database Calls
+      |
+      +---- Outgoing HTTP Requests
+      |
+      v
+Dynatrace OneAgent
+      |
+      v
+Dynatrace Platform
+      |
+      +---- Services
+      +---- Endpoints
+      +---- Distributed Tracing
+      +---- SQL Spans
+      +---- Failure Analysis
+```
+
+## 3. Prerequisites
+
+| Component | Requirement |
+|---|---|
+| Dynatrace OneAgent | Installed and running in Full-Stack mode |
+| OneAgent Version | 1.251 or newer |
+| Python | CPython 3.8 or newer |
+| Python SDK | oneagent-sdk |
+| Operating System | Linux / Windows Server |
+| Network | Application port 8085 accessible |
+| Permissions | Normal user permissions |
+
+**Note:** The SOP was tested on Linux. The production target is Windows Server. Alpine Linux using musl is not supported.
+
+## 4. Python Environment Setup
+
+### Linux
+
+Create a Python virtual environment:
+
+```bash
 python3 -m venv venv
 source venv/bin/activate
+```
+
+Upgrade the required packages:
+
+```bash
 python -m pip install --upgrade pip setuptools wheel
+```
+
+Install the Dynatrace SDK:
+
+```bash
 python -m pip install oneagent-sdk
+```
+
+Verify SDK initialization:
+
+```bash
 python -c "import oneagent; print(oneagent.initialize())"
+```
 
-Expected result: the last command prints STATUS_INITIALIZED with error=None (Figure 1). If it prints "Could not load agent", the SDK is installed but the OneAgent is not running on this host.
+**Expected Result:**
 
+`STATUS_INITIALIZED` with `error=None`.
 
-Figure 1 - SDK check - output from the test server
-Windows Server: use the same steps with py -m venv venv, venv\Scripts\activate and py -m pip install oneagent-sdk.
-Module 2 - Run the application
-Stop any old copy: pkill -f sample_app.py.
-Start the application in server mode with the virtual environment's Python.
-Read the first log lines. They must show agent_state=0 (ACTIVE) (Figure 2). Any other state means no traces will be sent.
-From a second terminal, check the health endpoint (Figure 3).
-Open http://<server-ip>:8085/ in a browser (Figure 4).
+### Windows Server
+
+```powershell
+py -m venv venv
+venv\Scripts\activate
+py -m pip install oneagent-sdk
+```
+
+## 5. Run the Python Application
+
+Start the sample application:
+
+```bash
 venv/bin/python sample_app.py --mode server --port 8085
+```
 
+Verify the application startup logs.
 
+Expected SDK state:
 
-Figure 2 - Application start - expected output (example timestamps)
+```text
+agent_state=0 (ACTIVE)
+```
 
+Check the health endpoint:
 
-Figure 3 - Health check - output from the test server
+```bash
+curl http://localhost:8085/health
+```
 
+Open the application:
 
-Figure 4 - Application UI: normal endpoints, red failure-scenario buttons, last response and recent orders
-Useful settings (environment variables): APP_URL (target of the outgoing call), APP_TIMEOUT, APP_SERVICE_NAME (service name in Dynatrace, default SampleApp), APP_DB and APP_LOG.
-Module 3 - Confirm the process is detected
-In Dynatrace open Compute > Processes (or open the host and use its Processes section).
-Find the process by the application's script name. It has its own process group.
-Check CPU, memory and network on the process page. The service is not listed yet unless the SDK is already active.
+```text
+http://<server-ip>:8085/
+```
 
+### Application Configuration
 
-Figure 5 - Process detected in Dynatrace (process-level monitoring, no traces yet)
-Module 4 - SDK integration in the code
-Every SDK change in the application is wrapped in comments, so all of them can be found by searching the file for SDK ADDED.
-Step
-Where in the code
-What it adds
-Seen in Dynatrace as
-1
-Top of the file
-import oneagent
--
-2
-init_sdk()
-Initializes the SDK, logs the agent state, creates reusable database and web application info
-Agent state in the log
-3
-db() helper
-trace_sql_database_request around every SQL statement
-SQL spans (INSERT, SELECT, UPDATE, DELETE)
-4
-http_get() helper
-trace_outgoing_web_request, passes the Dynatrace tag in the request header
-Outgoing GET span, links to the called service
-5
-Business steps (run_cycle, checkout_flow, ...)
-trace_custom_service for internal steps, custom request attributes, optional trace ID in log lines
-Internal steps and filterable attributes
-6
-Handler.traced()
-trace_incoming_web_request for each business endpoint (not for health, UI page or UI data)
-Request / endpoint such as /work
-7
-main()
-Clean shutdown on stop (oneagent.shutdown())
--
+| Environment Variable | Description |
+|---|---|
+| APP_URL | Target URL for outgoing HTTP calls |
+| APP_TIMEOUT | Timeout configuration |
+| APP_SERVICE_NAME | Service name in Dynatrace |
+| APP_DB | Database configuration |
+| APP_LOG | Application log configuration |
 
+## 6. Verify Process Detection in Dynatrace
 
-The pattern is the same everywhere: open a tracer with a with-block, do the work inside it. An exception that leaves the block marks that step as failed.
-with sdk.trace_custom_service("run_cycle", "SampleApp"):    # step appears as its own span
-    fetch_remote_data()                                      # outgoing call (child span)
-    store_records(5)                                         # SQL statements (child spans)
+1. Open Dynatrace.
+2. Navigate to **Compute → Processes**.
+3. Search for the Python application process.
+4. Open the process details.
+5. Verify CPU, memory, and network metrics.
 
-Note: SQL spans are only recorded inside another SDK trace. In this application every SQL call runs inside a traced endpoint or step.
-Module 5 - Verify traces in Dynatrace
-Generate traffic: click the endpoint buttons in the UI (or use the auto traffic button).
-In Dynatrace open Distributed Tracing > Explorer, set the time range to the last 30 minutes and refresh. Allow a few minutes for the first data. If the Requests view says "No matching requests", click Change to spans.
-Check that the service name (SampleApp) and the endpoints are listed (Figures 6 and 8).
-Open one trace and check the structure: request, internal step, outgoing call and SQL statements (Figure 7).
-Use Group by > Endpoint to compare counts and response times per endpoint.
+At this stage, process-level monitoring should be available.
 
+## 7. Dynatrace SDK Instrumentation
 
-Figure 6 - First traces after the SDK integration: /work and its internal step run_cycle
+The following SDK components are integrated into the Python application.
 
+| Application Component | SDK Integration | Dynatrace Visibility |
+|---|---|---|
+| Import section | import oneagent | SDK dependency |
+| init_sdk() | SDK initialization | Agent state |
+| db() helper | trace_sql_database_request | SQL statements |
+| http_get() helper | trace_outgoing_web_request | Outgoing requests |
+| Business steps | trace_custom_service | Custom business transactions |
+| Handler.traced() | trace_incoming_web_request | Incoming requests and endpoints |
+| main() | oneagent.shutdown() | Clean SDK shutdown |
 
-Figure 7 - Trace detail: request, run_cycle, outgoing call and SQL statements, with the linked log line
+### Example: Custom Service Tracing
 
+```python
+with sdk.trace_custom_service("run_cycle", "SampleApp"):
+    fetch_remote_data()
+    store_records(5)
+```
 
-Figure 8 - Multi-endpoint version: each endpoint is listed separately with its own duration and status
-Module 6 - Failure scenarios
-Purpose: confirm that failures are visible in Dynatrace with enough detail to find the cause. The application has five dedicated failure endpoints (red buttons in the UI), each producing a different kind of failure, plus two older ones. Each failure is reported to Dynatrace through the SDK (the failed tracer carries the exception type and message).
-6.1 Failure endpoints
-Endpoint
-What fails
-HTTP
-What to look for in Dynatrace
-/fail/exception
-Exception inside a traced step (invalid number). With ?qty=5 it succeeds.
-500
-Failed request and failed step validate_order with the exception text
-/fail/db
-SQL error - table does not exist
-500
-Failed SQL span under the failed request
-/fail/downstream
-Outgoing call to a service that is down
-502
-Failed outgoing-call span (connection refused)
-/fail/timeout
-Outgoing call that times out after 1 s (the called request needs 4 s)
-504
-Failed outgoing call after about 1 s, plus a separate slow request of about 4 s
-/fail/random
-Fails at random, ?rate=0.5 (default 50%)
-500
-Failure rate (%) of the service over time
-/error
-Always an unhandled error
-500
-Baseline failed request
-/checkout?fail=1
-Payment step declined by the payment service
-402
-Linked requests. 402 is not a server failure by default (see 6.4)
+**Important:** SQL spans are recorded inside another SDK trace. Database calls should execute within a traced endpoint or business step.
 
+## 8. Verify Distributed Tracing
 
-6.2 Trigger the failures
-In the UI, click the red buttons under Failure scenarios. Click each one a few times. Start auto traffic also mixes in about one failure for every five calls.
-Or use curl (Figure 9). Each call prints the response and the HTTP status.
+Follow these steps in Dynatrace:
 
+1. Generate application traffic using the application UI.
+2. Open **Distributed Tracing → Explorer**.
+3. Select the last 30 minutes.
+4. Refresh the page.
+5. Verify that the SampleApp service is visible.
+6. Open an individual trace.
+7. Verify incoming requests, internal business steps, outgoing calls, and SQL statements.
 
-Figure 9 - Failure endpoints - output from the application test run
-6.3 Analyse the failures in Dynatrace
-Open Distributed Tracing > Explorer and set the time range to the last 30 minutes. Failed calls are marked Error in red (Figure 10). Use the facets on the left to narrow the list to errors. If the Requests view is empty, switch to Spans.
-Open a failed request, for example /fail/db. In the trace, find the span marked as failed. For /fail/db it is the SQL statement, for /fail/downstream the outgoing call, for /fail/exception the step validate_order (Figure 11).
-Open the span details to see the request status (Failure), the span status (Error) and the HTTP status (Figure 12). Open the Exceptions tab to read the exception class and message (Figure 11).
-Open the Logs tab of the trace to see log lines related to the failing request (compare Figure 7). Note: the trace and span IDs that the application writes into its own log lines were all zeros in this test, so do not rely on them for matching.
-Open Services > SampleApp and check the failure rate and response time while /fail/random and the auto traffic are running.
-For /fail/timeout, find the slow /slow request of about 4 s in the same trace and compare it with the 1 s wait of the caller.
+If the Requests view shows no matching requests, switch to the Spans view.
 
+### Expected Visibility
 
-Figure 10 - Spans view in Distributed Tracing: SampleApp spans, failed calls marked Error in red (failed SQL and server spans)
+- Application services
+- Individual endpoints
+- Request execution time
+- Internal business transactions
+- Outgoing HTTP calls
+- SQL database statements
+- Application failures
 
+## 9. Application Failure Scenarios
 
-Figure 11 - Failed trace of /fail/db: the SQL span is marked failed and the Exceptions tab shows OperationalError - no such table: orders_archive
+The sample application contains dedicated endpoints to test different failure scenarios.
 
+| Endpoint | Failure Scenario | Expected HTTP Status |
+|---|---|---|
+| /fail/exception | Exception inside business logic | 500 |
+| /fail/db | SQL database error | 500 |
+| /fail/downstream | Downstream service unavailable | 502 |
+| /fail/timeout | Outgoing request timeout | 504 |
+| /fail/random | Random application failure | 500 |
+| /error | Unhandled application error | 500 |
+| /checkout?fail=1 | Payment declined | 402 |
 
-Figure 12 - Span details of a failed /fail/random request: request status Failure, span status Error, HTTP status 500
-6.4 What counts as a failure
-By default Dynatrace treats HTTP status codes 500 to 599 as server-side failures. Client errors such as 402 (payment declined) or 404 (not found) are not counted as server-side failures. So /checkout?fail=1 shows as a successful request with status 402 unless the rule is changed. The 5xx endpoints above are failures by default.
-To count other codes as failures: Settings > Process and contextualize > Services > Failure detection rules, or for one service Services > Explorer > select the service > Actions > Settings > HTTP parameters, turn on override and add the range (for example 400-402). Menu names differ slightly between Dynatrace versions.
-6.5 Failure test checklist
-#
-Check
-Result
-1
-Each /fail/* endpoint returns the expected HTTP status (Figure 9)
-[   ]
-2
-Failed requests appear in Distributed Tracing
-[   ]
-3
-The failed span is identifiable (SQL, outgoing call or step) with its error text
-[   ]
-4
-The log line of the failing request is linked in the trace
-[   ]
-5
-Service failure rate rises while /fail/random runs
-[   ]
-6
-402 on /checkout?fail=1 is understood as success unless the failure rule is changed
-[   ]
+### Failure Analysis in Dynatrace
 
-Module 7 - Troubleshooting
-Symptom
-Likely cause / action
-pip fails with "Permission denied" inside venv
-The venv was created with sudo or by another user. Run: sudo chown -R $(whoami):$(whoami) venv, or delete it and recreate it as your own user.
-curl: Failed to connect to port 8085
-Application is not running in server mode (default for the older version was worker), it crashed, or the port is used by an old copy. Check: ss -tlnp | grep 8085, pkill -f sample_app.py, start again.
-Starting fails with the bind step in the traceback
-Port already in use (old process). Stop it or choose another port with --port.
-"Could not load agent" / agent_state is not ACTIVE
-OneAgent is not running on the host or the application was started before it was installed. Check the OneAgent service, then restart the application.
-Run work / outgoing call is slow
-The outgoing URL is unreachable and waits for the timeout. Set APP_URL to a reachable URL or lower APP_TIMEOUT.
-Process visible but no service or traces
-Traced code did not run yet (generate traffic), wrong time range, or agent not active. Wait a few minutes after the first requests.
-Log shows agent_state=1 (TEMPORARILY_INACTIVE); logs and process arrive but no traces
-The agent is not capturing for this process, so traced calls are dropped. Check that the host is in Full-stack (not Infrastructure-only) mode, that the process group is monitored and that the OneAgent service is healthy, then restart the application and confirm agent_state=0 (ACTIVE). The application logs the state only at startup, so check the last agent_state line in the log.
-SQL spans missing
-The SQL call is not inside another SDK trace. Wrap it in a traced endpoint or step.
-402 or 404 not shown as failed
-Expected - see 6.4. Only 5xx is a server-side failure by default.
-Crash when the application stops
-SDK not shut down. Stop it with Ctrl+C or a normal stop signal so oneagent.shutdown() runs.
+1. Open Distributed Tracing → Explorer.
+2. Select the last 30 minutes.
+3. Identify failed requests marked in red.
+4. Open an individual failed request.
+5. Identify the failed span.
+6. Review the exception details.
+7. Check the associated application logs.
+8. Review service failure rate and response time.
 
+### HTTP Failure Detection
 
-For SDK debugging, temporarily set the environment variables DT_LOGLEVELSDK=finest and DT_LOGLEVEL=finest, restart, and review the OneAgent logs on the host. Remove them afterwards.
-Final verification checklist
-#
-Check
-Result
-1
-SDK check prints STATUS_INITIALIZED
-[   ]
-2
-Application log shows agent_state=0 (ACTIVE)
-[   ]
-3
-Health endpoint returns ok
-[   ]
-4
-Process is visible in Dynatrace
-[   ]
-5
-Service and endpoints appear in Distributed Tracing
-[   ]
-6
-A trace shows request, internal step, outgoing call and SQL statements
-[   ]
-7
-Failure module checks in 6.5 passed
-[   ]
+By default, Dynatrace identifies HTTP status codes 500–599 as server-side failures.
 
-Rollback
-Redeploy the previous application version (without the SDK code) and restart it. OneAgent process-level monitoring is not affected.
-Removing the SDK needs no change to the OneAgent.
-References
-Dynatrace OneAgent SDK for Python: https://github.com/Dynatrace/OneAgent-SDK-for-Python
-SDK API documentation: https://dynatrace.github.io/OneAgent-SDK-for-Python/
-Dynatrace service failure detection: https://docs.dynatrace.com/docs/shortlink/service-failure-detection
+HTTP 402 and 404 are not considered server-side failures by default.
+
+Additional failure detection rules can be configured under:
+
+**Settings → Process and contextualize → Services → Failure detection rules**
+
+Menu names may vary depending on the Dynatrace version.
+
+## 10. Troubleshooting
+
+| Issue | Possible Cause / Resolution |
+|---|---|
+| Permission denied during pip installation | Check virtual environment ownership and permissions |
+| Application not accessible on port 8085 | Verify application status and port availability |
+| Could not load agent | Verify OneAgent installation and service status |
+| Process visible but no traces | Verify SDK initialization and generate application traffic |
+| agent_state=1 | Verify Full-Stack monitoring mode and OneAgent health |
+| SQL spans missing | Ensure SQL calls execute inside another SDK trace |
+| Outgoing calls are slow | Verify target URL and timeout configuration |
+| Application crashes during shutdown | Ensure oneagent.shutdown() executes during clean shutdown |
+
+### SDK Debugging
+
+For troubleshooting, temporarily enable:
+
+```bash
+DT_LOGLEVELSDK=finest
+DT_LOGLEVEL=finest
+```
+
+Restart the application and review OneAgent logs.
+
+Remove the debugging settings after troubleshooting.
+
+## 11. Final Verification Checklist
+
+- [ ] Dynatrace OneAgent installed and running.
+- [ ] Python SDK installed successfully.
+- [ ] SDK initialization returns STATUS_INITIALIZED.
+- [ ] Application startup shows agent_state=0 (ACTIVE).
+- [ ] Application health endpoint is accessible.
+- [ ] Python process is visible in Dynatrace.
+- [ ] Application service is visible.
+- [ ] Distributed traces are available.
+- [ ] SQL statements are captured.
+- [ ] Outgoing HTTP calls are captured.
+- [ ] Failure scenarios are successfully validated.
+
+## 12. Rollback Procedure
+
+- Redeploy the previous application version without SDK instrumentation.
+- Restart the application.
+- OneAgent process-level monitoring will remain unaffected.
+- Removing the SDK does not require uninstalling or modifying OneAgent.
+
+## 13. References
+
+- [Dynatrace OneAgent SDK for Python – GitHub](https://github.com/Dynatrace/OneAgent-SDK-for-Python)
+- [Dynatrace OneAgent SDK – API Documentation](https://dynatrace.github.io/OneAgent-SDK-for-Python/)
+- [Dynatrace Service Failure Detection](https://docs.dynatrace.com/docs/shortlink/service-failure-detection)
+
+---
+
+**Author:** Gajanan Kalkundre  
+**Technology:** Python | Dynatrace | OneAgent SDK | Distributed Tracing  
+**Purpose:** Application Performance Monitoring and Observability
