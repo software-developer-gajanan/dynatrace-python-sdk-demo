@@ -8,7 +8,6 @@ A practical, step-by-step guide to integrating the Dynatrace OneAgent SDK for Py
 **Document ID:** SOP-DT-PY-002  
 **Version:** 1.0  
 **Author:** Gajanan Kalkundre  
-**Date:** 15 November 2026
 
 ---
 
@@ -304,4 +303,3 @@ Remove the debugging settings after troubleshooting.
 
 **Author:** Gajanan Kalkundre  
 **Technology:** Python | Dynatrace | OneAgent SDK | Distributed Tracing  
-**Purpose:** Application Performance Monitoring and Observability
