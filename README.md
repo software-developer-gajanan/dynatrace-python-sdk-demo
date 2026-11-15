@@ -1,5 +1,3 @@
-# dynatrace-python-sdk-demo
-
 # Dynatrace OneAgent SDK for Python – Application Tracing
 
 A practical, step-by-step guide to integrating the Dynatrace OneAgent SDK for Python into a Python application, validating end-to-end tracing, testing failure scenarios, and troubleshooting common issues.
