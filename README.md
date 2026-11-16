@@ -594,36 +594,6 @@ Removing the SDK integration does not require uninstalling Dynatrace OneAgent fr
 
 ---
 
-## 14. Repository Structure
-
-Suggested GitHub repository structure:
-
-```text
-dynatrace-python-oneagent-sdk/
-│
-├── README.md
-│
-├── sample-app/
-│   ├── sample_app.py
-│   └── requirements.txt
-│
-├── architecture/
-│   └── architecture-diagram.png
-│
-├── screenshots/
-│   ├── 01-sdk-initialization.png
-│   ├── 02-application-startup.png
-│   ├── 03-application-ui.png
-│   ├── 04-process-detection.png
-│   ├── 05-distributed-traces.png
-│   ├── 06-trace-details.png
-│   ├── 07-failure-analysis.png
-│   └── 08-span-details.png
-│
-└── docs/
-    └── SOP-Dynatrace-OneAgent-SDK-Python.md
-```
-
 ### Adding Architecture Image
 
 Save the architecture diagram in the `architecture` folder and use the following Markdown in this README:
