@@ -8,7 +8,9 @@ A practical, step-by-step guide to integrating the Dynatrace OneAgent SDK for Py
 **Author:** Gajanan Kalkundre  
 
 ---
-blob:https://chatgpt.com/09b71370-7a4d-4f50-8baf-742ca3cd1a9c
+### High-Level Architecture
+
+![Dynatrace OneAgent SDK for Python Architecture](architecture/dynatrace-python-architecture.png)
 
 ## 1. Overview
 
