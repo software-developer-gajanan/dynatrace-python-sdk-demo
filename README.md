@@ -10,7 +10,7 @@ A practical, step-by-step guide to integrating the Dynatrace OneAgent SDK for Py
 ---
 ### High-Level Architecture
 
-![Dynatrace OneAgent SDK for Python Architecture](Architecture/Python OneAgent SDK Tracing Architecture.png)
+![Python OneAgent SDK Tracing Architecture](<Architecture/Python OneAgent SDK Tracing Architecture.png>)
 
 ## 1. Overview
 
